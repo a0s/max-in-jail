@@ -6,7 +6,7 @@
 
 <div align="center">
 
-<img src="logo.png" width="256" alt="Logo">
+<img src="image/logo.png" width="256" alt="Logo">
 
 **Безопасная установка мессенджера Max на macOS через эмулятор Android**
 
@@ -19,8 +19,8 @@
 
 <div align="center">
 
-<img src="screenshoot1.png" width="auto" height="400" alt="Screenshot 1" style="border: 1px solid #ccc;">
-<img src="screenshoot2.png" width="auto" height="400" alt="Screenshot 2" style="border: 1px solid #ccc; margin-left: 10px;">
+<img src="image/screenshoot1.png" width="auto" height="400" alt="Screenshot 1" style="border: 1px solid #ccc;">
+<img src="image/screenshoot2.png" width="auto" height="400" alt="Screenshot 2" style="border: 1px solid #ccc; margin-left: 10px;">
 
 </div>
 
