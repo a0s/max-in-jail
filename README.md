@@ -97,12 +97,31 @@ Usage: ./max-in-jail.sh [OPTIONS]
 
 Options:
   --attach     Run in foreground mode (follow logs, Ctrl+C stops emulator)
+  --apk PATH   Use custom APK file instead of downloading
   --uninstall  Remove all data created by script
   -h, --help   Show this help message
 
 By default, script runs in background mode:
   - Script exits, emulator keeps running
   - To stop emulator later, use: adb emu kill
+```
+
+### Использование кастомного APK файла
+
+Вы можете указать свой APK файл вместо автоматической загрузки:
+
+```bash
+./max-in-jail.sh --apk /path/to/your/file.apk
+```
+
+Скрипт автоматически:
+- Проверит существование файла
+- Валидирует, что это корректный APK
+- Использует его для установки
+
+Пример:
+```bash
+./max-in-jail.sh --apk apks/max-25.19.0.apk
 ```
 
 ---

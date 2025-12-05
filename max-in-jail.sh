@@ -124,6 +124,7 @@ EMULATOR_PID=""
 SCRIPT_EXIT_CODE=0
 DETACH_MODE=true  # By default, detach from emulator logs
 UNINSTALL_MODE=false
+CUSTOM_APK_PATH=""  # Path to custom APK file if provided via --apk
 
 # Cleanup function
 cleanup() {
@@ -181,11 +182,21 @@ parse_args() {
                 UNINSTALL_MODE=true
                 shift
                 ;;
+            --apk)
+                if [ -z "${2:-}" ]; then
+                    error " --apk requires a path to APK file"
+                    error "Usage: --apk /path/to/file.apk"
+                    exit 1
+                fi
+                CUSTOM_APK_PATH="$2"
+                shift 2
+                ;;
             -h|--help)
                 echo "Usage: $0 [OPTIONS]"
                 echo ""
                 echo "Options:"
                 echo "  --attach     Run in foreground mode (follow logs, Ctrl+C stops emulator)"
+                echo "  --apk PATH   Use custom APK file instead of downloading"
                 echo "  --uninstall  Remove all data created by script"
                 echo "  -h, --help   Show this help message"
                 echo ""
@@ -434,16 +445,56 @@ main() {
         return 1
     fi
 
-    # Step 3: Check for new APK version and download if needed
-    if ! check_apk_version; then
-        log "Downloading new APK version..."
-    fi
+    # Step 3: Handle APK file (custom or download)
+    local apk_file="$APK_DIR/max-messenger.apk"
 
-    if ! download_max_apk; then
-        error "Failed to download Max Messenger APK"
-        error "Cannot proceed without APK file"
-        SCRIPT_EXIT_CODE=1
-        return 1
+    if [ -n "$CUSTOM_APK_PATH" ]; then
+        # Use custom APK file
+        log "Using custom APK file: $CUSTOM_APK_PATH"
+
+        # Convert to absolute path if relative
+        if [[ "$CUSTOM_APK_PATH" != /* ]]; then
+            CUSTOM_APK_PATH="$(cd "$(dirname "$CUSTOM_APK_PATH")" && pwd)/$(basename "$CUSTOM_APK_PATH")"
+        fi
+
+        # Check if file exists
+        if [ ! -f "$CUSTOM_APK_PATH" ]; then
+            error "APK file not found: $CUSTOM_APK_PATH"
+            SCRIPT_EXIT_CODE=1
+            return 1
+        fi
+
+        # Verify APK file
+        log "Verifying APK file..."
+        if ! verify_apk "$CUSTOM_APK_PATH"; then
+            error "Invalid APK file: $CUSTOM_APK_PATH"
+            error "File does not appear to be a valid Android APK"
+            SCRIPT_EXIT_CODE=1
+            return 1
+        fi
+
+        # Copy to APK_DIR
+        ensure_dir "$APK_DIR"
+        log "Copying APK file to $apk_file..."
+        if cp "$CUSTOM_APK_PATH" "$apk_file"; then
+            log "APK file copied successfully"
+        else
+            error "Failed to copy APK file"
+            SCRIPT_EXIT_CODE=1
+            return 1
+        fi
+    else
+        # Download APK (default behavior)
+        if ! check_apk_version; then
+            log "Downloading new APK version..."
+        fi
+
+        if ! download_max_apk; then
+            error "Failed to download Max Messenger APK"
+            error "Cannot proceed without APK file"
+            SCRIPT_EXIT_CODE=1
+            return 1
+        fi
     fi
 
     # Step 4: Create and start AVD (only after APK is downloaded)
