@@ -3,6 +3,76 @@
 
 source "$(dirname "${BASH_SOURCE[0]}")/utils.sh"
 
+# Extract package name from APK file
+extract_package_name_from_apk() {
+    local apk_file=$1
+
+    if [ ! -f "$apk_file" ]; then
+        return 1
+    fi
+
+    # Try using aapt/aapt2 if available (most reliable)
+    if [ -n "${ANDROID_SDK_ROOT:-}" ] && [ -d "$ANDROID_SDK_ROOT/build-tools" ]; then
+        # Find aapt2 or aapt tools
+        local aapt2_tool=""
+        local aapt_tool=""
+
+        # Find the latest aapt2
+        for build_tool_dir in "$ANDROID_SDK_ROOT/build-tools"/*/; do
+            if [ -f "${build_tool_dir}aapt2" ]; then
+                aapt2_tool="${build_tool_dir}aapt2"
+                break
+            fi
+        done
+
+        # Find the latest aapt if aapt2 not found
+        if [ -z "$aapt2_tool" ]; then
+            for build_tool_dir in "$ANDROID_SDK_ROOT/build-tools"/*/; do
+                if [ -f "${build_tool_dir}aapt" ]; then
+                    aapt_tool="${build_tool_dir}aapt"
+                    break
+                fi
+            done
+        fi
+
+        # Try aapt2 first
+        if [ -n "$aapt2_tool" ] && [ -f "$aapt2_tool" ]; then
+            local badging_output
+            badging_output=$("$aapt2_tool" dump badging "$apk_file" 2>/dev/null)
+            if [ $? -eq 0 ] && [ -n "$badging_output" ]; then
+                # Extract package name - look for name='...' pattern
+                local package_name
+                package_name=$(echo "$badging_output" | grep "^package:" | sed -n "s/.*name='\([^']*\)'.*/\1/p" | head -1)
+                # Validate it looks like a package name (contains dots, not just numbers)
+                if [ -n "$package_name" ] && echo "$package_name" | grep -qE '^[a-zA-Z][a-zA-Z0-9_.]*$' && [ "$package_name" != "${package_name//[^0-9]/}" ]; then
+                    echo "$package_name"
+                    return 0
+                fi
+            fi
+        fi
+
+        # Try aapt as fallback
+        if [ -n "$aapt_tool" ] && [ -f "$aapt_tool" ]; then
+            local badging_output
+            badging_output=$("$aapt_tool" dump badging "$apk_file" 2>/dev/null)
+            if [ $? -eq 0 ] && [ -n "$badging_output" ]; then
+                # Extract package name - look for name='...' pattern
+                local package_name
+                package_name=$(echo "$badging_output" | grep "^package:" | sed -n "s/.*name='\([^']*\)'.*/\1/p" | head -1)
+                # Validate it looks like a package name (contains dots, not just numbers)
+                if [ -n "$package_name" ] && echo "$package_name" | grep -qE '^[a-zA-Z][a-zA-Z0-9_.]*$' && [ "$package_name" != "${package_name//[^0-9]/}" ]; then
+                    echo "$package_name"
+                    return 0
+                fi
+            fi
+        fi
+    fi
+
+    # Fallback: Try to extract from AndroidManifest.xml using unzip and aapt
+    # This is less reliable but might work if aapt is not available
+    return 1
+}
+
 # Verify APK file is valid (contains AndroidManifest.xml)
 verify_apk() {
     local apk_file=$1
