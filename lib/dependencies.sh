@@ -9,13 +9,11 @@ install_dependencies() {
 
     local all_installed=true
 
-    # Check and install Homebrew if needed
+    # Homebrew should already be installed at this point (checked in main())
+    # But verify it's still available
     if ! brew_installed; then
-        warn "Homebrew is not installed. Installing Homebrew..."
-        if ! install_homebrew; then
-            error "Failed to install Homebrew"
-            return 1
-        fi
+        error "Homebrew is not available. This should not happen."
+        return 1
     fi
 
     # Java (OpenJDK)
@@ -121,21 +119,42 @@ install_homebrew() {
         return 0
     fi
 
-    log "Installing Homebrew..."
-    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || {
+    log "Installing Homebrew (non-interactive mode)..."
+
+    # Run installation in non-interactive mode
+    NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || {
         error "Failed to install Homebrew"
         return 1
     }
 
-    # Add Homebrew to PATH for Apple Silicon Macs
+    # Add Homebrew to PATH (detect installation path)
+    local brew_path=""
     if [ -f "/opt/homebrew/bin/brew" ]; then
-        eval "$(/opt/homebrew/bin/brew shellenv)"
+        # Apple Silicon (arm64)
+        brew_path="/opt/homebrew/bin/brew"
     elif [ -f "/usr/local/bin/brew" ]; then
-        eval "$(/usr/local/bin/brew shellenv)"
+        # Intel (x86_64)
+        brew_path="/usr/local/bin/brew"
     fi
 
-    log "Homebrew installed successfully"
-    return 0
+    if [ -n "$brew_path" ] && [ -f "$brew_path" ]; then
+        log "Adding Homebrew to PATH..."
+        eval "$($brew_path shellenv)"
+        export PATH="$PATH"
+
+        # Verify installation
+        if command_exists brew; then
+            log "Homebrew installed successfully"
+            return 0
+        else
+            warn "Homebrew installed but not found in PATH. You may need to restart your terminal."
+            warn "Or run: eval \"\$($brew_path shellenv)\""
+            return 1
+        fi
+    else
+        error "Homebrew installation completed but brew binary not found"
+        return 1
+    fi
 }
 
 # Verify all dependencies are installed

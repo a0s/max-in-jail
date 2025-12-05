@@ -309,6 +309,24 @@ main() {
     log "Cache directory: $CACHE_DIR"
     log "Log file: $LOG_FILE"
 
+    # Step 0: Check and install Homebrew if needed (required for all other dependencies)
+    # Load utils first to get brew_installed function
+    source "$LIB_DIR/utils.sh"
+
+    if ! brew_installed; then
+        log "Homebrew not found. Installing Homebrew (this may take a few minutes)..."
+        # Load dependencies module to get install_homebrew function
+        source "$LIB_DIR/dependencies.sh"
+        if ! install_homebrew; then
+            error "Failed to install Homebrew. Cannot proceed without it."
+            error "Please install Homebrew manually: /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+            SCRIPT_EXIT_CODE=1
+            return 1
+        fi
+    else
+        log "Homebrew is installed"
+    fi
+
     # Load modules
     source "$LIB_DIR/dependencies.sh"
     source "$LIB_DIR/android_sdk.sh"
