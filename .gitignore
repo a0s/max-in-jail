@@ -1,0 +1,23 @@
+# APK files
+apk/
+*.apk
+
+# Log files
+*.log
+setup.log
+
+# Android SDK (if installed locally)
+# Uncomment if you want to ignore SDK
+# Library/Android/
+
+# macOS
+.DS_Store
+
+# Temporary files
+*.tmp
+*.temp
+
+# Reference scripts (not part of main project)
+download_max_from_rustore.sh
+test.sh
+
