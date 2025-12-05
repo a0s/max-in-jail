@@ -16,6 +16,9 @@ setup.log
 # Temporary files
 *.tmp
 *.temp
+apk/temp_extract_*/
+apk/*.container
+apk_extracted/
 
 # Reference scripts (not part of main project)
 download_max_from_rustore.sh

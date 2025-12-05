@@ -3,6 +3,45 @@
 
 source "$(dirname "${BASH_SOURCE[0]}")/utils.sh"
 
+# Verify APK file is valid (contains AndroidManifest.xml)
+verify_apk() {
+    local apk_file=$1
+
+    if [ ! -f "$apk_file" ]; then
+        return 1
+    fi
+
+    # Check if file is a ZIP archive
+    if ! file "$apk_file" | grep -q "Zip archive"; then
+        return 1
+    fi
+
+    # Try using aapt/aapt2 if available (more reliable)
+    if [ -n "${ANDROID_SDK_ROOT:-}" ]; then
+        local aapt2="$ANDROID_SDK_ROOT/build-tools/*/aapt2"
+        local aapt="$ANDROID_SDK_ROOT/build-tools/*/aapt"
+
+        # Try aapt2 first
+        for tool in $aapt2 $aapt; do
+            if [ -f "$tool" ] 2>/dev/null; then
+                if "$tool" dump badging "$apk_file" >/dev/null 2>&1; then
+                    return 0
+                fi
+            fi
+        done
+    fi
+
+    # Fallback: Check if APK contains AndroidManifest.xml using unzip
+    # Count matches - handle grep exit code properly
+    local manifest_count
+    manifest_count=$(unzip -l "$apk_file" 2>&1 | grep -c "AndroidManifest.xml" 2>/dev/null || echo "0")
+    if [ "$manifest_count" -eq 0 ]; then
+        return 1
+    fi
+
+    return 0
+}
+
 # Download Max Messenger APK (idempotent - skips if already exists)
 download_max_apk() {
     log "Downloading Max Messenger APK..."
@@ -30,7 +69,8 @@ download_max_apk() {
     if [ -f "$apk_file" ]; then
         log "APK file already exists at $apk_file"
         # Verify it's a valid APK
-        if file_exists "$apk_file"; then
+        if verify_apk "$apk_file"; then
+            log "Existing APK file is valid, skipping download"
             return 0
         else
             warn "Existing APK file appears invalid, re-downloading..."
@@ -43,28 +83,48 @@ download_max_apk() {
 
     # Method 1: Try RuStore (most reliable for Russian apps)
     if download_from_rustore "$MAX_PACKAGE_NAME" "$apk_file"; then
-        log "Successfully downloaded APK from RuStore"
-        return 0
+        if verify_apk "$apk_file"; then
+            log "Successfully downloaded and verified APK from RuStore"
+            return 0
+        else
+            warn "Downloaded APK from RuStore failed validation, trying other sources..."
+            rm -f "$apk_file"
+        fi
     fi
 
     # Method 2: Try APKMirror
     if download_from_apkmirror "$MAX_PACKAGE_NAME" "$apk_file"; then
-        log "Successfully downloaded APK from APKMirror"
-        return 0
+        if verify_apk "$apk_file"; then
+            log "Successfully downloaded and verified APK from APKMirror"
+            return 0
+        else
+            warn "Downloaded APK from APKMirror failed validation, trying other sources..."
+            rm -f "$apk_file"
+        fi
     fi
 
     # Method 3: Try APKPure
     if download_from_apkpure "$MAX_PACKAGE_NAME" "$apk_file"; then
-        log "Successfully downloaded APK from APKPure"
-        return 0
+        if verify_apk "$apk_file"; then
+            log "Successfully downloaded and verified APK from APKPure"
+            return 0
+        else
+            warn "Downloaded APK from APKPure failed validation, trying other sources..."
+            rm -f "$apk_file"
+        fi
     fi
 
     # Method 4: Try using apkeep (requires Google account)
     if command_exists apkeep; then
         log "Attempting to download using apkeep..."
         if download_with_apkeep "$MAX_PACKAGE_NAME" "$apk_file"; then
-            log "Successfully downloaded APK using apkeep"
-            return 0
+            if verify_apk "$apk_file"; then
+                log "Successfully downloaded and verified APK using apkeep"
+                return 0
+            else
+                warn "Downloaded APK using apkeep failed validation"
+                rm -f "$apk_file"
+            fi
         fi
     fi
 
@@ -182,15 +242,132 @@ download_from_rustore() {
     fi
 
     log "Downloading APK from RuStore..."
+
+    # RuStore returns a container ZIP with the actual APK inside
+    # Download to temporary file first
+    local temp_container="${output_file}.container"
+
     # Use exact same curl command as working script: -fSL -C -
-    if curl -fSL -C - -o "$output_file" "$apk_url"; then
-        if [ -f "$output_file" ]; then
-            log "APK downloaded successfully: ${version_name} (${version_code})"
-            return 0
+    if curl -fSL -C - -o "$temp_container" "$apk_url"; then
+        if [ ! -f "$temp_container" ]; then
+            warn "Downloaded file not found"
+            return 1
+        fi
+
+        log "Extracting APK from RuStore container..."
+
+        # Extract the inner APK file from the container
+        # RuStore containers typically contain a single .apk file
+        # Use project directory for debugging purposes
+        local temp_dir
+        temp_dir="$APK_DIR/temp_extract_$$"
+        mkdir -p "$temp_dir"
+        local extracted_apk=""
+
+        # Extract container
+        if unzip -q "$temp_container" -d "$temp_dir" 2>/dev/null; then
+            # Find all APK files in the container
+            local apk_files
+            apk_files=$(find "$temp_dir" -name "*.apk" -type f)
+
+            if [ -z "$apk_files" ]; then
+                warn "No APK file found inside RuStore container"
+                log "Contents of container:"
+                find "$temp_dir" -type f | head -10 | while read file; do
+                    log "  $file"
+                done
+                warn "Temporary extraction directory preserved for debugging: $temp_dir"
+                warn "Container file preserved for debugging: $temp_container"
+                # Don't delete for debugging - user can clean up manually
+                # rm -rf "$temp_dir"
+                # rm -f "$temp_container"
+                return 1
+            fi
+
+            # Try to find a valid APK (one that contains AndroidManifest.xml)
+            extracted_apk=""
+            while IFS= read -r candidate_apk; do
+                if [ -n "$candidate_apk" ] && [ -f "$candidate_apk" ]; then
+                    log "Checking candidate APK: $candidate_apk"
+                    # Check by counting matches - handle grep exit code properly
+                    local manifest_count
+                    manifest_count=$(unzip -l "$candidate_apk" 2>&1 | grep -c "AndroidManifest.xml" 2>/dev/null || echo "0")
+                    if [ "$manifest_count" -gt 0 ]; then
+                        extracted_apk="$candidate_apk"
+                        log "Found valid APK: $extracted_apk"
+                        break
+                    fi
+                fi
+            done <<< "$apk_files"
+
+            # If no valid APK found, use the first one (might still work)
+            if [ -z "$extracted_apk" ]; then
+                extracted_apk=$(echo "$apk_files" | head -1)
+                log "No APK with AndroidManifest.xml found, using first APK: $extracted_apk"
+            fi
+
+            if [ -z "$extracted_apk" ] || [ ! -f "$extracted_apk" ]; then
+                warn "Failed to find valid APK file inside RuStore container"
+                warn "Temporary extraction directory preserved for debugging: $temp_dir"
+                warn "Container file preserved for debugging: $temp_container"
+                # Don't delete for debugging - user can clean up manually
+                # rm -rf "$temp_dir"
+                # rm -f "$temp_container"
+                return 1
+            fi
+
+            # Verify the extracted APK contains AndroidManifest.xml
+            log "Verifying extracted APK: $extracted_apk"
+            log "APK file size: $(ls -lh "$extracted_apk" 2>/dev/null | awk '{print $5}' || echo 'unknown')"
+
+            # Check for AndroidManifest.xml by counting matches
+            local manifest_count
+            manifest_count=$(unzip -l "$extracted_apk" 2>&1 | grep -c "AndroidManifest.xml" 2>/dev/null || echo "0")
+            if [ "$manifest_count" -gt 0 ]; then
+                log "APK verification successful - AndroidManifest.xml found"
+            else
+                warn "Extracted file does not appear to be a valid APK (no AndroidManifest.xml)"
+                warn "First few entries in APK:"
+                unzip -l "$extracted_apk" 2>&1 | head -10 | while IFS= read -r line || [ -n "$line" ]; do
+                    warn "  $line"
+                done
+                warn "Temporary extraction directory preserved for debugging: $temp_dir"
+                warn "Container file preserved for debugging: $temp_container"
+                warn "Extracted APK file: $extracted_apk"
+                # Don't delete for debugging - user can clean up manually
+                # rm -rf "$temp_dir"
+                # rm -f "$temp_container"
+                return 1
+            fi
+
+            # Move extracted APK to final location
+            if mv "$extracted_apk" "$output_file"; then
+                log "APK extracted successfully: ${version_name} (${version_code})"
+                # Cleanup temporary files (keep for debugging on error)
+                log "Cleaning up temporary files..."
+                rm -rf "$temp_dir"
+                rm -f "$temp_container"
+                return 0
+            else
+                warn "Failed to move extracted APK to final location"
+                warn "Temporary extraction directory preserved for debugging: $temp_dir"
+                warn "Container file preserved for debugging: $temp_container"
+                warn "Extracted APK file: $extracted_apk"
+                # Don't delete for debugging - user can clean up manually
+                # rm -rf "$temp_dir"
+                # rm -f "$temp_container"
+                return 1
+            fi
+        else
+            warn "Failed to extract APK from RuStore container"
+            rm -rf "$temp_dir"
+            rm -f "$temp_container"
+            return 1
         fi
     fi
 
     warn "Failed to download APK from RuStore"
+    rm -f "$temp_container"
     rm -f "$output_file"
     return 1
 }
