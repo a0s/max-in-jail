@@ -63,7 +63,7 @@ install_android_sdk() {
     local zip_file="$temp_dir/cmdline-tools.zip"
 
     log "Downloading Android Command Line Tools..."
-    if ! curl -L -o "$zip_file" "$sdk_url"; then
+    if ! download_with_progress "$sdk_url" "$zip_file"; then
         error "Failed to download Android Command Line Tools"
         rm -rf "$temp_dir"
         return 1

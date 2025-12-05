@@ -4,9 +4,9 @@
 # This script automates the setup and launch of Max Messenger in an Android emulator
 #
 # Usage:
-#   ./max-in-box.sh              # Run in foreground mode (follow logs, Ctrl+C stops emulator)
-#   ./max-in-box.sh --detach     # Run in background mode (script exits, emulator keeps running)
-#   ./max-in-box.sh --uninstall  # Remove all data created by script
+#   ./max-in-jail.sh              # Run in background mode (script exits, emulator keeps running)
+#   ./max-in-jail.sh --attach     # Run in foreground mode (follow logs, Ctrl+C stops emulator)
+#   ./max-in-jail.sh --uninstall  # Remove all data created by script
 
 set -euo pipefail
 
@@ -18,8 +18,8 @@ LIB_DIR="$SCRIPT_DIR/lib"
 AVD_NAME="max_messenger_avd"
 MAX_PACKAGE_NAME="${MAX_PACKAGE_NAME:-}"  # Will be detected or can be set via env var
 
-# Use cache directory for all user data (can be easily removed by deleting ~/.cache/max-in-box)
-CACHE_DIR="${HOME}/.cache/max-in-box"
+# Use cache directory for all user data (can be easily removed by deleting ~/.cache/max-in-jail)
+CACHE_DIR="${HOME}/.cache/max-in-jail"
 ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-${CACHE_DIR}/android-sdk}"
 APK_DIR="${CACHE_DIR}/apk"
 LOG_FILE="${CACHE_DIR}/logs/setup.log"
@@ -40,7 +40,7 @@ source "$LIB_DIR/utils.sh"
 # Global state
 EMULATOR_PID=""
 SCRIPT_EXIT_CODE=0
-DETACH_MODE=false
+DETACH_MODE=true  # By default, detach from emulator logs
 UNINSTALL_MODE=false
 
 # Cleanup function
@@ -88,8 +88,8 @@ trap cleanup EXIT INT TERM
 parse_args() {
     while [[ $# -gt 0 ]]; do
         case $1 in
-            --detach)
-                DETACH_MODE=true
+            --attach)
+                DETACH_MODE=false
                 shift
                 ;;
             --uninstall)
@@ -100,13 +100,13 @@ parse_args() {
                 echo "Usage: $0 [OPTIONS]"
                 echo ""
                 echo "Options:"
-                echo "  --detach     Run in background mode (script exits, emulator keeps running)"
+                echo "  --attach     Run in foreground mode (follow logs, Ctrl+C stops emulator)"
                 echo "  --uninstall  Remove all data created by script"
                 echo "  -h, --help   Show this help message"
                 echo ""
-                echo "By default, script runs in foreground mode:"
-                echo "  - Follows emulator logs"
-                echo "  - Press Ctrl+C to stop emulator and exit"
+                echo "By default, script runs in background mode:"
+                echo "  - Script exits, emulator keeps running"
+                echo "  - To stop emulator later, use: adb emu kill"
                 exit 0
                 ;;
             *)
@@ -207,7 +207,7 @@ uninstall_all() {
     echo "    * Log files"
     echo "  - Android SDK"
     echo ""
-    echo -e "${GREEN}Easy way to remove everything: rm -rf ~/.cache/max-in-box${NC}"
+    echo -e "${GREEN}Easy way to remove everything: rm -rf ~/.cache/max-in-jail${NC}"
     echo ""
     echo -e "${RED}This action cannot be undone!${NC}"
     echo ""
@@ -391,9 +391,9 @@ main() {
 
     log "Setup complete! Max Messenger should be running in the emulator."
 
-    # Handle detach mode vs foreground mode
+    # Handle detach mode vs attach mode
     if [ "$DETACH_MODE" = true ]; then
-        log "Running in detach mode - script will exit, emulator will keep running."
+        log "Running in background mode - script will exit, emulator will keep running."
         log "To stop emulator later, use: adb emu kill"
         SCRIPT_EXIT_CODE=0
         FORCE_CLEANUP=""  # Don't cleanup on exit in detach mode

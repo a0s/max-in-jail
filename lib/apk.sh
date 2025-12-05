@@ -455,7 +455,7 @@ download_from_apkmirror() {
     local download_url=$(curl -s "$search_url" 2>/dev/null | grep -o 'href="[^"]*apk[^"]*"' | head -1 | sed 's/href="//;s/"$//')
 
     if [ -n "$download_url" ]; then
-        if curl -L -o "$output_file" "https://www.apkmirror.com$download_url" 2>/dev/null && [ -f "$output_file" ]; then
+        if download_with_progress "https://www.apkmirror.com$download_url" "$output_file" && [ -f "$output_file" ]; then
             return 0
         fi
     fi
@@ -475,7 +475,7 @@ download_from_apkpure() {
     local download_url=$(curl -s "$app_url" 2>/dev/null | grep -o 'href="[^"]*apk[^"]*download[^"]*"' | head -1 | sed 's/href="//;s/"$//')
 
     if [ -n "$download_url" ]; then
-        if curl -L -o "$output_file" "$download_url" 2>/dev/null && [ -f "$output_file" ]; then
+        if download_with_progress "$download_url" "$output_file" && [ -f "$output_file" ]; then
             return 0
         fi
     fi
