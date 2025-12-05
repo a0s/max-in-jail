@@ -7,12 +7,93 @@
 #   ./max-in-jail.sh              # Run in background mode (script exits, emulator keeps running)
 #   ./max-in-jail.sh --attach     # Run in foreground mode (follow logs, Ctrl+C stops emulator)
 #   ./max-in-jail.sh --uninstall  # Remove all data created by script
+#
+# Or run directly from GitHub:
+#   curl -fsSL https://raw.githubusercontent.com/a0s/max-in-jail/main/max-in-jail.sh | bash
 
 set -euo pipefail
 
-# Get script directory
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LIB_DIR="$SCRIPT_DIR/lib"
+# GitHub repository configuration
+GITHUB_REPO="a0s/max-in-jail"
+GITHUB_BRANCH="main"
+GITHUB_BASE_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}"
+
+# Temporary directory for lib files when running via curl (will be cleaned up)
+TEMP_LIB_DIR=""
+
+# Setup lib directory - check if we're running from a cloned repo or via curl
+setup_lib_directory() {
+    # Get script directory (works even when piped from curl)
+    local script_path="${BASH_SOURCE[0]}"
+
+    # Check if script is in a file (not piped from stdin)
+    # When piped, BASH_SOURCE[0] might be empty, "-", or not point to a file
+    if [ -n "$script_path" ] && [ "$script_path" != "-" ] && [ -f "$script_path" ]; then
+        SCRIPT_DIR="$(cd "$(dirname "$script_path")" && pwd)"
+        LIB_DIR="$SCRIPT_DIR/lib"
+
+        # Check if lib directory exists (we're in a cloned repo)
+        if [ -d "$LIB_DIR" ] && [ -f "$LIB_DIR/utils.sh" ]; then
+            return 0
+        fi
+    fi
+
+    # We're running via curl or lib directory doesn't exist
+    # Check if curl is available
+    if ! command -v curl >/dev/null 2>&1; then
+        echo "Error: curl is required to download files from GitHub" >&2
+        echo "Please install curl or clone the repository:" >&2
+        echo "  git clone https://github.com/${GITHUB_REPO}.git" >&2
+        exit 1
+    fi
+
+    # Create temporary directory and download lib files
+    TEMP_LIB_DIR=$(mktemp -d -t max-in-jail-lib-XXXXXX)
+    LIB_DIR="$TEMP_LIB_DIR/lib"
+    mkdir -p "$LIB_DIR"
+
+    echo "Downloading required files from GitHub..." >&2
+
+    # List of lib files to download
+    local lib_files=("utils.sh" "dependencies.sh" "android_sdk.sh" "avd.sh" "apk.sh" "app.sh")
+
+    for lib_file in "${lib_files[@]}"; do
+        local url="${GITHUB_BASE_URL}/lib/${lib_file}"
+        local output_file="${LIB_DIR}/${lib_file}"
+
+        if ! curl -fsSL "$url" -o "$output_file"; then
+            echo "Error: Failed to download ${lib_file} from GitHub" >&2
+            echo "URL: $url" >&2
+            echo "Please check your internet connection or clone the repository:" >&2
+            echo "  git clone https://github.com/${GITHUB_REPO}.git" >&2
+            rm -rf "$TEMP_LIB_DIR"
+            exit 1
+        fi
+
+        # Make file executable
+        chmod +x "$output_file"
+    done
+
+    echo "Files downloaded successfully" >&2
+    return 0
+}
+
+# Cleanup temporary lib directory
+cleanup_temp_lib() {
+    if [ -n "$TEMP_LIB_DIR" ] && [ -d "$TEMP_LIB_DIR" ]; then
+        rm -rf "$TEMP_LIB_DIR" 2>/dev/null || true
+    fi
+}
+
+# Setup lib directory before anything else
+setup_lib_directory
+
+# Get script directory (for reference, but LIB_DIR is already set)
+if [ -f "${BASH_SOURCE[0]}" ]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+else
+    SCRIPT_DIR="${TEMP_LIB_DIR:-/tmp}"
+fi
 
 # Configuration
 AVD_NAME="max_messenger_avd"
@@ -46,6 +127,9 @@ UNINSTALL_MODE=false
 # Cleanup function
 cleanup() {
     local exit_code=$?
+
+    # Cleanup temporary lib directory
+    cleanup_temp_lib
 
     # Only cleanup on error or interrupt, not on normal exit or detach mode
     if [ "$DETACH_MODE" = true ]; then
