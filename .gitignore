@@ -1,10 +1,6 @@
-# APK files
+# APK files (now in ~/.cache/max-in-box/apk/)
 apk/
 *.apk
-
-# Log files
-*.log
-setup.log
 
 # Android SDK (if installed locally)
 # Uncomment if you want to ignore SDK
@@ -20,7 +16,4 @@ apk/temp_extract_*/
 apk/*.container
 apk_extracted/
 
-# Reference scripts (not part of main project)
-download_max_from_rustore.sh
-test.sh
 

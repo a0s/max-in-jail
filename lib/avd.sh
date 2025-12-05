@@ -11,6 +11,12 @@ create_or_start_avd() {
     export ANDROID_HOME="$ANDROID_SDK_ROOT"
     export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$ANDROID_SDK_ROOT/emulator:$PATH"
 
+    # Use custom AVD home if set, otherwise default to ~/.android/avd
+    if [ -z "${ANDROID_AVD_HOME:-}" ]; then
+        export ANDROID_AVD_HOME="$HOME/.android/avd"
+    fi
+    ensure_dir "$ANDROID_AVD_HOME"
+
     local avdmanager="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/avdmanager"
     local emulator="$ANDROID_SDK_ROOT/emulator/emulator"
 
@@ -33,7 +39,7 @@ create_or_start_avd() {
         if [ "$(uname -m)" = "arm64" ]; then
             current_arch="arm64-v8a"
         fi
-        local avd_config="$HOME/.android/avd/${AVD_NAME}.avd/config.ini"
+        local avd_config="${ANDROID_AVD_HOME}/${AVD_NAME}.avd/config.ini"
         if [ -f "$avd_config" ] && grep -q "x86_64" "$avd_config" && [ "$current_arch" = "arm64-v8a" ]; then
             warn "Existing AVD uses x86_64 architecture but host is arm64"
             warn "Deleting incompatible AVD and creating new one..."

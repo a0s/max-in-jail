@@ -97,6 +97,14 @@ install_dependencies() {
         fi
     fi
 
+    # pv (pipe viewer - for beautiful progress bars)
+    if ! command_exists pv; then
+        log "pv not found, installing via Homebrew (for download progress bar)..."
+        if ! brew_install_if_missing pv; then
+            warn "pv installation failed, will use basic progress bar"
+        fi
+    fi
+
     if [ "$all_installed" = true ]; then
         log "All dependencies are installed"
         return 0

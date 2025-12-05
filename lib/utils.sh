@@ -10,14 +10,35 @@ NC='\033[0m' # No Color
 
 # Logging functions
 log() {
+    # Ensure log directory exists before writing
+    if [ -n "${LOG_FILE:-}" ] && [ "$LOG_FILE" != "/dev/stdout" ] && [ "$LOG_FILE" != "/dev/stderr" ]; then
+        local log_dir=$(dirname "$LOG_FILE")
+        if [ ! -d "$log_dir" ]; then
+            mkdir -p "$log_dir" 2>/dev/null || true
+        fi
+    fi
     echo -e "${GREEN}[$(date +'%Y-%m-%d %H:%M:%S')]${NC} $1" | tee -a "${LOG_FILE:-/dev/stdout}"
 }
 
 error() {
+    # Ensure log directory exists before writing
+    if [ -n "${LOG_FILE:-}" ] && [ "$LOG_FILE" != "/dev/stdout" ] && [ "$LOG_FILE" != "/dev/stderr" ]; then
+        local log_dir=$(dirname "$LOG_FILE")
+        if [ ! -d "$log_dir" ]; then
+            mkdir -p "$log_dir" 2>/dev/null || true
+        fi
+    fi
     echo -e "${RED}[ERROR]${NC} $1" | tee -a "${LOG_FILE:-/dev/stderr}" >&2
 }
 
 warn() {
+    # Ensure log directory exists before writing
+    if [ -n "${LOG_FILE:-}" ] && [ "$LOG_FILE" != "/dev/stdout" ] && [ "$LOG_FILE" != "/dev/stderr" ]; then
+        local log_dir=$(dirname "$LOG_FILE")
+        if [ ! -d "$log_dir" ]; then
+            mkdir -p "$log_dir" 2>/dev/null || true
+        fi
+    fi
     echo -e "${YELLOW}[WARN]${NC} $1" | tee -a "${LOG_FILE:-/dev/stdout}"
 }
 
@@ -98,5 +119,46 @@ file_exists() {
 # Check if directory exists and is writable
 dir_exists() {
     [ -d "$1" ] && [ -w "$1" ]
+}
+
+# Download file with progress bar
+download_with_progress() {
+    local url=$1
+    local output_file=$2
+    local resume=${3:-false}
+
+    # Check if pv is available (pipe viewer - best progress bar)
+    if command_exists pv; then
+        local curl_opts="-fSL"
+        if [ "$resume" = "true" ]; then
+            curl_opts="$curl_opts -C -"
+        fi
+
+        # Get file size if possible
+        local file_size
+        file_size=$(curl -sI "$url" 2>/dev/null | grep -i "content-length" | awk '{print $2}' | tr -d '\r')
+
+        if [ -n "$file_size" ] && [ "$file_size" -gt 0 ] 2>/dev/null; then
+            # Use pv with known file size - show progress bar with ETA
+            # pv writes progress to stderr (terminal), data to stdout (file)
+            curl $curl_opts "$url" 2>/dev/null | pv -s "$file_size" -N "Downloading" -w 80 > "$output_file"
+        else
+            # Use pv without known size
+            curl $curl_opts "$url" 2>/dev/null | pv -N "Downloading" -w 80 > "$output_file"
+        fi
+        local exit_code=${PIPESTATUS[0]}
+        echo ""  # New line after progress bar
+        return $exit_code
+    fi
+
+    # Fallback: use curl with progress bar (simpler output)
+    local curl_opts="-fSL --progress-bar"
+    if [ "$resume" = "true" ]; then
+        curl_opts="$curl_opts -C -"
+    fi
+
+    # Use curl progress bar (shows percentage and speed)
+    curl $curl_opts -o "$output_file" "$url"
+    return $?
 }
 

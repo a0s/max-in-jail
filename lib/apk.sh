@@ -317,8 +317,8 @@ download_from_rustore() {
     # Download to temporary file first
     local temp_container="${output_file}.container"
 
-    # Use exact same curl command as working script: -fSL -C -
-    if curl -fSL -C - -o "$temp_container" "$apk_url"; then
+    # Use download_with_progress for better UX
+    if download_with_progress "$apk_url" "$temp_container" "true"; then
         if [ ! -f "$temp_container" ]; then
             warn "Downloaded file not found"
             return 1
