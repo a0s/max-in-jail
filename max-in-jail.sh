@@ -89,7 +89,7 @@ cleanup_temp_lib() {
 setup_lib_directory
 
 # Get script directory (for reference, but LIB_DIR is already set)
-if [ -f "${BASH_SOURCE[0]}" ]; then
+if [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "${BASH_SOURCE[0]}" ]; then
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 else
     SCRIPT_DIR="${TEMP_LIB_DIR:-/tmp}"
