@@ -160,7 +160,42 @@ wait_for_emulator() {
     # Additional wait for system to be fully ready
     sleep 5
     log "Emulator is ready"
+
+    # Set fake GPS coordinates
+    set_fake_gps_coordinates
+
     return 0
+}
+
+# Set fake GPS coordinates for the emulator
+set_fake_gps_coordinates() {
+    log "Setting fake GPS coordinates..."
+
+    export PATH="$ANDROID_SDK_ROOT/platform-tools:$PATH"
+    local adb="$ANDROID_SDK_ROOT/platform-tools/adb"
+
+    if [ ! -f "$adb" ]; then
+        warn "adb not found, skipping GPS setup"
+        return 1
+    fi
+
+    # Default coordinates: 55.968071, 37.434100 (can be overridden via env vars)
+    local latitude="${FAKE_GPS_LATITUDE:-55.968071}"
+    local longitude="${FAKE_GPS_LONGITUDE:-37.434100}"
+
+    log "Setting GPS coordinates: $latitude, $longitude"
+
+    # Use adb emu geo fix command to set fake GPS coordinates
+    if "$adb" emu geo fix "$longitude" "$latitude" 2>/dev/null; then
+        log "GPS coordinates set successfully"
+
+        # Verify coordinates were set (optional - some emulators may not support verification)
+        sleep 1
+        return 0
+    else
+        warn "Failed to set GPS coordinates (emulator may not support this feature)"
+        return 1
+    fi
 }
 
 # Check if emulator is running
