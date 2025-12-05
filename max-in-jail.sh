@@ -24,7 +24,7 @@ TEMP_LIB_DIR=""
 # Setup lib directory - check if we're running from a cloned repo or via curl
 setup_lib_directory() {
     # Get script directory (works even when piped from curl)
-    local script_path="${BASH_SOURCE[0]}"
+    local script_path="${BASH_SOURCE[0]:-}"
 
     # Check if script is in a file (not piped from stdin)
     # When piped, BASH_SOURCE[0] might be empty, "-", or not point to a file
@@ -89,8 +89,9 @@ cleanup_temp_lib() {
 setup_lib_directory
 
 # Get script directory (for reference, but LIB_DIR is already set)
-if [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "${BASH_SOURCE[0]}" ]; then
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+script_path_ref="${BASH_SOURCE[0]:-}"
+if [ -n "$script_path_ref" ] && [ -f "$script_path_ref" ]; then
+    SCRIPT_DIR="$(cd "$(dirname "$script_path_ref")" && pwd)"
 else
     SCRIPT_DIR="${TEMP_LIB_DIR:-/tmp}"
 fi
