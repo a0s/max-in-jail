@@ -90,7 +90,11 @@ cd max-in-jail
 ./max-in-jail.sh --help
 ```
 
-Вывод:
+или
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/a0s/max-in-jail/main/max-in-jail.sh | bash -s -- --help
+```
 
 ```
 Usage: ./max-in-jail.sh [OPTIONS]
@@ -115,11 +119,13 @@ By default, script runs in background mode:
 ```
 
 Скрипт автоматически:
+
 - Проверит существование файла
 - Валидирует, что это корректный APK
 - Использует его для установки
 
 Пример:
+
 ```bash
 ./max-in-jail.sh --apk apks/max-25.19.0.apk
 ```
